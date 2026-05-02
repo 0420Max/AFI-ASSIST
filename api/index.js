@@ -94,15 +94,14 @@ const __dirname = path.resolve();
 
 app.use(express.static(path.join(__dirname, "/client/dist")));
 
-app.use(( res ) => {
+app.use((req, res) => {
   res.sendFile(path.join(__dirname, "client", "dist", "index.html"));
 });
 
-app.listen(3000, () => {
-  console.log("Server listening on port 3000");
-});
-
-app.use((err, res) => {
+// Error handler doit être déclaré APRÈS toutes les routes mais AVANT
+// app.listen — sinon Express ne le détecte pas comme middleware d'erreur.
+// Express identifie un error handler par son arity (4 params : err,req,res,next).
+app.use((err, req, res, next) => {
   const statusCode = err.statusCode || 500;
   const message = err.message || "Internal Server Error";
   return res.status(statusCode).json({
@@ -110,4 +109,8 @@ app.use((err, res) => {
     message,
     statusCode,
   });
+});
+
+app.listen(3000, () => {
+  console.log("Server listening on port 3000");
 });
