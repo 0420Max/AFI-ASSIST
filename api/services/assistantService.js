@@ -242,6 +242,54 @@ export const sendMessage = async (message, threadId) => {
                   };
                   break;
 
+                case "captureCustomerInfo":
+                case "captureProductInfo":
+                case "captureIssueDetails": {
+                  // Conversational form-filling : call afi-ops-backend
+                  // directement (pas Zapier) pour persister + écrire
+                  // dans Monday en temps réel. Fire-and-forget tolerant.
+                  const captureMap = {
+                    captureCustomerInfo: 'capture-customer',
+                    captureProductInfo: 'capture-product',
+                    captureIssueDetails: 'capture-issue',
+                  };
+                  const path = captureMap[toolCall.function.name];
+                  const backendUrl =
+                    (process.env.AFI_OPS_BACKEND_URL || 'https://afi-ops-backend.onrender.com') +
+                    '/api/chat/' + path;
+                  const aiToken = process.env.AFI_AI_TOKEN || '';
+                  try {
+                    if (!aiToken) {
+                      throw new Error('AFI_AI_TOKEN not configured');
+                    }
+                    await axios.post(
+                      backendUrl,
+                      { threadId, ...args },
+                      {
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'X-AFI-AI-Token': aiToken,
+                        },
+                        timeout: 5000,
+                      }
+                    );
+                    toolOutputs.push({
+                      tool_call_id: toolCall.id,
+                      output: JSON.stringify({
+                        status: 'captured',
+                        fields: Object.keys(args),
+                      }),
+                    });
+                  } catch (e) {
+                    console.warn('[' + path + '] failed:', e.message);
+                    toolOutputs.push({
+                      tool_call_id: toolCall.id,
+                      output: JSON.stringify({ status: 'error' }),
+                    });
+                  }
+                  continue;
+                }
+
                 default:
                   console.warn(
                     `[ASSISTANT SERVICE] Unknown tool call: ${toolCall.function.name}`
