@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import dotenv from "dotenv";
 import axios from "axios";
-import { triggerWebhook } from "./webhookService.js";
+import { triggerWebhook, notifyBackendEscalation } from "./webhookService.js";
 
 dotenv.config();
 
@@ -260,6 +260,24 @@ export const sendMessage = async (message, threadId) => {
                   "Content-Type": "application/json",
                 },
               });
+
+              // Bug #3 fix : sur escalation, notifier afi-ops-backend
+              // pour qu'il enrichisse la description du ticket Monday
+              // avec le résumé AI structuré. Fire-and-forget : Zapier
+              // reste authoritative, backend best-effort.
+              if (toolCall.function.name === "sendEscalationEmail" && threadId) {
+                notifyBackendEscalation({
+                  threadId, // backend lookup conv via conv.aiThreadId
+                  summary: args.issue_summary || "",
+                  stepsDone: args.diagnostic_steps || args.steps_taken || "",
+                  productMentioned: args.product_model || args.model || "",
+                }).catch((e) =>
+                  console.warn(
+                    "[escalation] backend notify failed:",
+                    e.message
+                  )
+                );
+              }
 
               toolOutputs.push({
                 tool_call_id: toolCall.id,
