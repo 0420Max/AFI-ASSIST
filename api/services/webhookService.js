@@ -19,37 +19,45 @@ const AFI_AI_TOKEN = process.env.AFI_AI_TOKEN || '';
  * sur afi-ops-backend pour update la description du ticket Monday avec
  * le résumé AI structuré. Fire-and-forget : Zapier reste authoritative.
  *
+ * Identifier : conversationId (interne) OU threadId (OpenAI). Le backend
+ * fait le mapping threadId → conv via conv.aiThreadId.
+ *
  * @param {object} params
- * @param {string} params.conversationId   ID de la conversation chat backend
+ * @param {string} [params.threadId]        OpenAI thread ID (mappé côté backend)
+ * @param {string} [params.conversationId]  ID interne conv chat backend
  * @param {string} params.summary           Résumé du problème (5-1000 chars)
  * @param {string} [params.stepsDone]       Étapes diagnostic effectuées
  * @param {string} [params.productMentioned] Modèle/produit concerné
  * @returns {Promise<{ok:boolean, status?:number, error?:string}>}
  */
 export async function notifyBackendEscalation({
+  threadId,
   conversationId,
   summary,
   stepsDone,
   productMentioned
 }) {
-  if (!conversationId) {
-    console.warn('[notifyBackend] missing conversationId, skip');
-    return { ok: false, error: 'NO_CONV_ID' };
+  if (!conversationId && !threadId) {
+    console.warn('[notifyBackend] missing conversationId or threadId, skip');
+    return { ok: false, error: 'NO_IDENTIFIER' };
   }
   if (!AFI_AI_TOKEN) {
     console.warn('[notifyBackend] AFI_AI_TOKEN not set, skip');
     return { ok: false, error: 'NO_TOKEN' };
   }
 
+  const body = {
+    summary: summary || '',
+    stepsDone: stepsDone || '',
+    productMentioned: productMentioned || ''
+  };
+  if (conversationId) body.conversationId = conversationId;
+  if (threadId) body.threadId = threadId;
+
   try {
     const response = await axios.post(
       `${AFI_OPS_BACKEND_URL}/api/chat/escalation-update`,
-      {
-        conversationId,
-        summary: summary || '',
-        stepsDone: stepsDone || '',
-        productMentioned: productMentioned || ''
-      },
+      body,
       {
         headers: {
           'Content-Type': 'application/json',
